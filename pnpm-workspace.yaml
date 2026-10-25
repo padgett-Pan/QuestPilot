@@ -1,0 +1,7 @@
+allowBuilds:
+  '@prisma/client': true
+  '@prisma/engines': true
+  '@tailwindcss/oxide': true
+  argon2: false
+  esbuild: true
+  prisma: true

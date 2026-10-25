@@ -1,0 +1,62 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    container_name: questpilot-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: questpilot
+      POSTGRES_PASSWORD: questpilot
+      POSTGRES_DB: questpilot
+    ports:
+      - "5432:5432"
+    volumes:
+      - questpilot_pgdata:/var/lib/postgresql/data
+
+  minio:
+    image: minio/minio:latest
+    container_name: questpilot-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: questpilot
+      MINIO_ROOT_PASSWORD: questpilot-secret
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - questpilot_minio:/data
+
+  app:
+    build: .
+    container_name: questpilot-app
+    restart: unless-stopped
+    env_file:
+      - .env.local
+    environment:
+      DATABASE_URL: postgresql://questpilot:questpilot@postgres:5432/questpilot?schema=public
+      MINIO_ENDPOINT: minio
+      MINIO_PORT: 9000
+    depends_on:
+      - postgres
+      - minio
+    ports:
+      - "3000:3000"
+
+  worker:
+    build: .
+    container_name: questpilot-worker
+    restart: unless-stopped
+    command: ["node", "worker/index.mjs"]
+    env_file:
+      - .env.local
+    environment:
+      DATABASE_URL: postgresql://questpilot:questpilot@postgres:5432/questpilot?schema=public
+      MINIO_ENDPOINT: minio
+      MINIO_PORT: 9000
+    depends_on:
+      - postgres
+      - minio
+
+volumes:
+  questpilot_pgdata:
+  questpilot_minio:

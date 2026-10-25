@@ -1,0 +1,11 @@
+node_modules
+.next
+.git
+.agents
+AI交接文档
+tools
+data
+minio
+uploads
+tmp
+*.log

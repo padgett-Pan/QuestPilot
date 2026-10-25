@@ -1,0 +1,286 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  STUDENT
+  TEACHER
+}
+
+enum MembershipRole {
+  OWNER
+  TEACHER
+  STUDENT
+}
+
+enum JobStatus {
+  QUEUED
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+enum MediaKind {
+  AUDIO
+  VIDEO
+}
+
+model User {
+  id                    String                 @id @default(cuid())
+  email                 String                 @unique
+  passwordHash          String
+  name                  String
+  role                  Role                   @default(STUDENT)
+  emailVerifiedAt       DateTime?
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
+  sessions              Session[]
+  emailVerificationTokens EmailVerificationToken[]
+  memberships           TeamMember[]
+  sentInvitations       TeamInvitation[]       @relation("InvitationSender")
+  receivedInvitations   TeamInvitation[]       @relation("InvitationReceiver")
+  comments              Comment[]
+  notifications         Notification[]
+  auditLogs             AuditLog[]
+  goals                 Goal[]
+}
+
+model Session {
+  id         String   @id @default(cuid())
+  token      String   @unique
+  userId     String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model EmailVerificationToken {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String
+  expiresAt DateTime
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Team {
+  id           String           @id @default(cuid())
+  name         String
+  description  String?
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+  members      TeamMember[]
+  invitations  TeamInvitation[]
+  goals        Goal[]
+  plans        Plan[]
+  documents    KnowledgeDocument[]
+  mediaAssets  MediaAsset[]
+  reviews      AIReview[]
+  comments     Comment[]
+}
+
+model TeamMember {
+  id        String         @id @default(cuid())
+  teamId    String
+  userId    String
+  role      MembershipRole @default(STUDENT)
+  createdAt DateTime       @default(now())
+  team      Team           @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([teamId, userId])
+}
+
+model TeamInvitation {
+  id         String   @id @default(cuid())
+  teamId     String
+  senderId   String
+  receiverId String?
+  email      String
+  token      String   @unique
+  acceptedAt DateTime?
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  team       Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  sender     User     @relation("InvitationSender", fields: [senderId], references: [id], onDelete: Cascade)
+  receiver   User?    @relation("InvitationReceiver", fields: [receiverId], references: [id], onDelete: SetNull)
+}
+
+model Competition {
+  id          String   @id @default(cuid())
+  name        String
+  season      String
+  description String?
+  rubric      Json
+  createdAt   DateTime @default(now())
+  goals       Goal[]
+}
+
+model Goal {
+  id            String      @id @default(cuid())
+  title         String
+  brief         String
+  skills        Json?
+  availability  Json?
+  userId        String?
+  teamId        String?
+  competitionId String?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  user          User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+  team          Team?       @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  competition   Competition? @relation(fields: [competitionId], references: [id], onDelete: SetNull)
+  plans         Plan[]
+}
+
+model Plan {
+  id          String     @id @default(cuid())
+  title       String
+  summary     String
+  status      String     @default("ACTIVE")
+  generatedBy String     @default("demo")
+  goalId      String?
+  teamId      String?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  goal        Goal?      @relation(fields: [goalId], references: [id], onDelete: SetNull)
+  team        Team?      @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  tasks       PlanTask[]
+}
+
+model PlanTask {
+  id          String    @id @default(cuid())
+  planId      String
+  title       String
+  description String
+  phase       String
+  owner       String?
+  priority    String    @default("MEDIUM")
+  status      String    @default("TODO")
+  dueDate     DateTime?
+  dependencies Json?
+  plan        Plan      @relation(fields: [planId], references: [id], onDelete: Cascade)
+}
+
+model KnowledgeDocument {
+  id          String          @id @default(cuid())
+  title       String
+  sourceType  String
+  sourceUrl   String?
+  storageKey  String?
+  mimeType    String?
+  content     String
+  status      JobStatus       @default(COMPLETED)
+  teamId      String?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  team        Team?           @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  chunks      KnowledgeChunk[]
+}
+
+model KnowledgeChunk {
+  id         String             @id @default(cuid())
+  documentId String
+  content    String
+  index      Int
+  embedding  Json?
+  document   KnowledgeDocument  @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  citations  KnowledgeCitation[]
+}
+
+model KnowledgeCitation {
+  id        String         @id @default(cuid())
+  chunkId   String
+  reviewId  String?
+  quote     String
+  chunk     KnowledgeChunk @relation(fields: [chunkId], references: [id], onDelete: Cascade)
+  review    AIReview?      @relation(fields: [reviewId], references: [id], onDelete: SetNull)
+}
+
+model MediaAsset {
+  id          String      @id @default(cuid())
+  teamId      String?
+  kind        MediaKind
+  title       String
+  fileName    String
+  storageKey  String
+  mimeType    String
+  sizeBytes   Int
+  durationSec Int?
+  createdAt   DateTime    @default(now())
+  team        Team?       @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  jobs        MediaJob[]
+  frames      MediaFrame[]
+}
+
+model MediaJob {
+  id          String     @id @default(cuid())
+  mediaId     String
+  status      JobStatus  @default(QUEUED)
+  progress    Int        @default(0)
+  attempts    Int        @default(0)
+  error       String?
+  result      Json?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  media       MediaAsset @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+}
+
+model MediaFrame {
+  id        String     @id @default(cuid())
+  mediaId   String
+  timestamp Float
+  storageKey String
+  analysis  Json?
+  media     MediaAsset @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+}
+
+model AIReview {
+  id          String              @id @default(cuid())
+  teamId      String?
+  title       String
+  summary     String
+  score       Int
+  dimensions  Json
+  actions     Json
+  createdAt   DateTime            @default(now())
+  team        Team?               @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  citations   KnowledgeCitation[]
+  comments    Comment[]
+}
+
+model Comment {
+  id        String   @id @default(cuid())
+  body      String
+  userId    String
+  teamId    String?
+  reviewId  String?
+  taskId    String?
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  team      Team?    @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  review    AIReview? @relation(fields: [reviewId], references: [id], onDelete: SetNull)
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  title     String
+  body      String
+  readAt    DateTime?
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  action    String
+  metadata  Json?
+  createdAt DateTime @default(now())
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+}
